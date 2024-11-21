@@ -34,9 +34,9 @@ def main():
     print("Starting simulation...")
     frame_count = 0
 
-    swarm = Agents(N_AGENTS,SENSOR_RANGE,dt)
+    swarm = Agents(DIMS,N_AGENTS,SENSOR_RANGE,dt)
     alg = Algorithms(SENSOR_RANGE)
-    obstacles = Obstacles(N_AGENTS,SENSOR_RANGE,dt)
+    obstacles = Obstacles(DIMS,N_AGENTS,SENSOR_RANGE,dt)
 
     t = 0
 
@@ -72,7 +72,7 @@ def main():
             # Plot the swarm
             if CREATE_GIF:
                 last = t+dt > SIM_TIME
-                tools.create_frame(swarm, A, t, frame_count, obstacles.plane_definitions, last)
+                tools.create_frame(swarm, A, t, frame_count, obstacles.plane_definitions, last, swarm.env.gusts)
                 frame_count += 1
 
     # Save data
@@ -99,7 +99,8 @@ def main():
     # animate_drone_positions(np.array(swarm.data), 'drone_positions.gif')
 
 class Obstacles:
-    def __init__(self, N_AGENTS, SENSOR_RANGE, dt):
+    def __init__(self, DIMS, N_AGENTS, SENSOR_RANGE, dt):
+        self.DIMS = DIMS
         self.N_AGENTS = N_AGENTS
         self.r = SENSOR_RANGE
         self.dt = dt
@@ -122,7 +123,7 @@ class Obstacles:
         Ak = np.zeros((self.N_AGENTS,self.N_OBSTACLES))
         for i in range(self.N_AGENTS):
             for k in range(self.N_OBSTACLES):
-                if np.linalg.norm(self.get_plane_position(swarm.states[:DIMS,i],self.obs_plane_ak[k],self.obs_plane_yk[k])) <= self.r:
+                if np.linalg.norm(self.get_plane_position(swarm.states[:self.DIMS,i],self.obs_plane_ak[k],self.obs_plane_yk[k])) <= self.r:
                     Ak[i,k] = 1
         return Ak
     
@@ -148,28 +149,33 @@ class Obstacles:
         P = np.identity(3)-np.outer(a_k,a_k.T)
         return np.matmul(P,p_i)
     
+#%% Agents class (system dynamics)
 class Agents:
-    def __init__(self, N_AGENTS, SENSOR_RANGE, dt):
+    def __init__(self, DIMS, N_AGENTS, SENSOR_RANGE, dt):
+        self.DIMS = DIMS
         self.N_AGENTS = N_AGENTS
         self.r = SENSOR_RANGE
         self.dt = dt
-        scaling_vector = np.concatenate([50*np.ones(DIMS),5*np.ones(DIMS)])
-        self.states = np.random.uniform(-1,1,(2*DIMS, N_AGENTS)) * np.array(scaling_vector)[:, np.newaxis]
-        if DIMS == 3: # state cannot be below ground
+        scaling_vector = np.concatenate([50*np.ones(self.DIMS),5*np.ones(self.DIMS)])
+        self.states = np.random.uniform(-1,1,(2*self.DIMS, N_AGENTS)) * np.array(scaling_vector)[:, np.newaxis]
+        if self.DIMS == 3: # state cannot be below ground
             self.states[2, :] = np.random.uniform(0.1, 1, N_AGENTS) * scaling_vector[2]
         self.data = [np.array(self.states)]
+
+        self.env = Environment(self.DIMS,self.N_AGENTS,self.dt)
 
     def get_adjacency(self):
         A = np.zeros((self.N_AGENTS,self.N_AGENTS))
         for i in range(self.N_AGENTS):
             for j in range(self.N_AGENTS):
-                if np.linalg.norm(self.states[:DIMS,i] - self.states[:DIMS,j]) <= self.r:
+                if np.linalg.norm(self.states[:self.DIMS,i] - self.states[:self.DIMS,j]) <= self.r:
                     A[i,j] = 1
         return A
 
     def update(self,u,i_agent):
-        self.states[DIMS:, i_agent] += u*self.dt           # Update velocity
-        self.states[:DIMS, i_agent] += self.states[DIMS:, i_agent]*self.dt
+        u = self.env.generate_gust(u,i_agent)                   # Apply gusting
+        self.states[self.DIMS:, i_agent] += u*self.dt           # Update velocity
+        self.states[:self.DIMS, i_agent] += self.states[self.DIMS:, i_agent]*self.dt
         self.save_data()
 
     def save_data(self):
@@ -258,7 +264,34 @@ class Algorithms:
         d_beta = self.sigma_norm(self.d_prime)
         return self.rho_h(self.sigma_norm(q_k-q_i)/d_beta)
 
+#%% Environmental factors
+class Environment:
+    def __init__(self,DIMS,N_AGENTS,dt):
+        self.DIMS = DIMS
+        self.N_AGENTS = N_AGENTS
+        self.dt = dt
+        self.gust_decay_rate = 5.0
+        self.gust_probability = 0.1
+        self.gusts = np.zeros((3,N_AGENTS))
+        self.MAX_GUST_MAGNITUDE = 50
 
+    def generate_gust(self,u,i_agent):
+        if np.linalg.norm(self.gusts[:,i_agent]) <= 1e-2:
+            self.gusts[:,i_agent] = np.zeros(self.DIMS)                     # Reset gust
+
+            if np.random.uniform(0,1) < self.gust_probability:              # Generate gust
+                magnitude = np.random.uniform(10,self.MAX_GUST_MAGNITUDE)
+                direction = np.random.uniform(-1,1,self.DIMS)
+                direction[2] *= 0.5                                         # Restrict gust in z direction
+                direction /= np.linalg.norm(direction)
+                self.gusts[:,i_agent] = magnitude*direction
+
+        else:                                                               # Decay existing gust
+            self.gusts[:,i_agent] *= np.exp(-self.gust_decay_rate*self.dt)
+        
+        u += self.gusts[:,i_agent]
+
+        return u
 
 if __name__ == '__main__':
     main()

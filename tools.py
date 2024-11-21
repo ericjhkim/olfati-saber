@@ -99,7 +99,7 @@ def plot_separation(data):
     plt.grid()
     plt.show()
 
-def create_frame(swarm, A, t, frame_count, planes, last):
+def create_frame(swarm, A, t, frame_count, planes, last, wind_gusts):
     # Turn off interactive mode
     plt.ioff()
 
@@ -181,6 +181,10 @@ def create_frame(swarm, A, t, frame_count, planes, last):
             poly = art3d.Poly3DCollection([prism_points], color='black')
             ax.add_collection3d(poly)
 
+            wx, wy, wz = wind_gusts[:, i]  # Extract the wind gust vector for this agent
+            length = np.linalg.norm([wx, wy, wz])/5
+            ax.quiver(x, y, z, wx, wy, wz, color='blue', length=length, normalize=True, linewidth=0.5)
+
         ## Plotting obstacles
         # Plotting obstacles (planes)
         x = np.linspace(-50, 50, 50)
@@ -221,6 +225,9 @@ def create_frame(swarm, A, t, frame_count, planes, last):
             triangle_points = create_triangle_points_2d(x, y, vx, vy, scale=1.5)
             polygon = plt.Polygon(triangle_points, color='black')
             ax.add_patch(polygon)
+
+            wx, wy = wind_gusts[0, i], wind_gusts[1, i]  # Extract the wind gust vector for this agent
+            ax.quiver(x, y, wx, wy, color='blue', angles='xy', scale_units='xy', scale=1, linewidth=1)
 
     # Save the current frame as an image
     plt.savefig(f'frames/frame_{frame_count:04d}.png')
