@@ -5,9 +5,7 @@
 import os
 import numpy as np
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 from PIL import Image
-from mpl_toolkits.mplot3d import Axes3D, art3d
 import tools
 from datetime import datetime
 

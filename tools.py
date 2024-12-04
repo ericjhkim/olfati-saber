@@ -99,7 +99,7 @@ def plot_separation(data):
     plt.grid()
     plt.show()
 
-def create_frame(swarm, A, t, frame_count, planes, last, wind_gusts):
+def create_frame(swarm, A, t, frame_count, planes, last, wind_gusts, F=None):
     # Turn off interactive mode
     plt.ioff()
 
@@ -153,6 +153,8 @@ def create_frame(swarm, A, t, frame_count, planes, last, wind_gusts):
         return rotated_triangle + np.array([x, y, z])
     
     N_AGENTS = swarm.states.shape[1]
+    if F is None:
+        F = np.zeros((N_AGENTS, N_AGENTS))
 
     if swarm.states.shape[0] == 6:
         # 3D plot
@@ -178,7 +180,12 @@ def create_frame(swarm, A, t, frame_count, planes, last, wind_gusts):
             x, y, z = swarm.states[0, i], swarm.states[1, i], swarm.states[2, i]
             vx, vy, vz = swarm.states[3, i], swarm.states[4, i], swarm.states[5, i]
             prism_points = create_prism_points_3d(x, y, z, vx, vy, vz, scale=1.5)
-            poly = art3d.Poly3DCollection([prism_points], color='black')
+            
+            # Check forbidden connections
+            is_forbidden = np.any(F[i] == 1)
+            color = 'red' if is_forbidden else 'black'
+
+            poly = art3d.Poly3DCollection([prism_points], color=color)
             ax.add_collection3d(poly)
 
             wx, wy, wz = wind_gusts[:, i]  # Extract the wind gust vector for this agent
